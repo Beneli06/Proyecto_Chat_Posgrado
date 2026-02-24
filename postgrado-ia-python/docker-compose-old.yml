@@ -1,11 +1,12 @@
 services:
+  # PostgreSQL Database for n8n
   postgres:
     image: postgres:16-alpine
     container_name: postgrado-postgres
     restart: always
     environment:
-      POSTGRES_USER: n8n_user
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_USER: ${DB_USER:-n8n_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
       POSTGRES_DB: n8n
       PGDATA: /var/lib/postgresql/data/pgdata
     volumes:
@@ -13,13 +14,14 @@ services:
     ports:
       - "5432:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -h localhost -U n8n_user -d n8n"]
+      test: ["CMD-SHELL", "pg_isready -h localhost -U ${DB_USER:-n8n_user} -d n8n"]
       interval: 10s
       timeout: 5s
       retries: 5
     networks:
       - rag-network
 
+  # ChromaDB Vector Database
   chromadb:
     image: chromadb/chroma:latest
     container_name: postgrado-chromadb
@@ -32,9 +34,16 @@ services:
       - CHROMA_SERVER_AUTH_PROVIDER=none
       - CHROMA_SERVER_HOST=0.0.0.0
       - CHROMA_SERVER_HTTP_PORT=8000
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/heartbeat"] || exit 1
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
     networks:
       - rag-network
 
+  # n8n Workflow Orchestration
   n8n:
     image: n8nio/n8n:latest
     container_name: postgrado-n8n
@@ -44,9 +53,11 @@ services:
     environment:
       DB_TYPE: postgresdb
       DB_POSTGRESDB_HOST: postgres
-      DB_POSTGRESDB_USER: n8n_user
-      DB_POSTGRESDB_PASSWORD: postgres
+      DB_POSTGRESDB_PORT: 5432
       DB_POSTGRESDB_DATABASE: n8n
+      DB_POSTGRESDB_USER: ${DB_USER:-n8n_user}
+      DB_POSTGRESDB_PASSWORD: ${DB_PASSWORD:-postgres}
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY:-your_encryption_key_here}
       N8N_HOST: n8n
       N8N_PORT: 5678
       N8N_PROTOCOL: http
@@ -60,7 +71,13 @@ services:
         condition: service_healthy
     networks:
       - rag-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5678/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
+  # RAG Chatbot API
   rag-api:
     image: postgrado-rag-api:latest
     container_name: postgrado-rag-api
@@ -68,23 +85,25 @@ services:
     ports:
       - "8000:8000"
     environment:
-      ENVIRONMENT: production
+      ENVIRONMENT: ${ENVIRONMENT:-production}
       API_HOST: 0.0.0.0
       API_PORT: 8000
       VECTOR_DB_PATH: ./chroma_db
-      LLM_MODEL: gpt-4
-      TEMPERATURE: 0.3
-      MAX_TOKENS: 1000
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-sk-test}
-      CHROMADB_HOST: chromadb
-      CHROMADB_PORT: 8000
-      POSTGRES_HOST: postgres
-      POSTGRES_USER: n8n_user
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: documents
+      LLM_MODEL: ${LLM_MODEL:-gpt-4}
+      TEMPERATURE: ${TEMPERATURE:-0.3}
+      MAX_TOKENS: ${MAX_TOKENS:-1000}
+      RETRIEVAL_K: ${RETRIEVAL_K:-5}
+      CHUNK_SIZE: ${CHUNK_SIZE:-1000}
+      CHUNK_OVERLAP: ${CHUNK_OVERLAP:-200}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+    volumes:
+      - ./app:/app/app
+      - ./documents:/app/documents
+      - ./logs:/app/logs
+      - chromadb_data:/app/chroma_db
     depends_on:
-      - postgres
-      - chromadb
+      chromadb:
+        condition: service_healthy
     networks:
       - rag-network
     healthcheck:
@@ -93,11 +112,14 @@ services:
       timeout: 5s
       retries: 5
 
-volumes:
-  postgres_data:
-  chromadb_data:
-  n8n_data:
-
 networks:
   rag-network:
     driver: bridge
+
+volumes:
+  postgres_data:
+    driver: local
+  chromadb_data:
+    driver: local
+  n8n_data:
+    driver: local

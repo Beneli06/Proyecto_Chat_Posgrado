@@ -1,0 +1,29 @@
+=== PRUEBA DE RENDIMIENTO - SISTEMA RAG CHATBOT ===
+Timestamp: Tue Feb 24 08:30:59 AM -05 2026
+Endpoint: http://localhost:8000/health
+Usuarios concurrentes: 50
+Requests por usuario: 10
+Total requests: 500
+=======================================
+
+Iniciando pruebas concurrentes...
+Pruebas completadas.
+
+=== RESULTADOS ===
+Total Requests: 500
+Exitosas: 500 (HTTP 200)
+Fallidas: 0
+Tasa de Error: 0%
+
+=== LATENCIA (ms) ===
+Mínima: 15ms
+Promedio: 138.176ms
+P95: 292ms
+Máxima: 547ms
+
+=== THROUGHPUT ===
+Requests por segundo: 16.66 req/s
+
+=== STATUS DEL SISTEMA ===
+{"status":"healthy","vector_db_connected":true,"llm_available":true}
+
